@@ -1,111 +1,120 @@
 import java.util.*;
 
-class PlagiarismDetector {
+class PageEvent {
+    String url;
+    String userId;
+    String source;
 
-    // n-gram -> set of document IDs containing that n-gram
-    private HashMap<String, Set<String>> ngramIndex = new HashMap<>();
+    public PageEvent(String url, String userId, String source) {
+        this.url = url;
+        this.userId = userId;
+        this.source = source;
+    }
+}
 
-    // documentId -> list of its ngrams
-    private HashMap<String, List<String>> documentNgrams = new HashMap<>();
+class RealTimeAnalytics {
 
-    private int N = 5; // 5-gram window
+    // pageUrl -> visit count
+    private HashMap<String, Integer> pageVisits = new HashMap<>();
 
-    // Break text into n-grams
-    private List<String> generateNgrams(String text) {
+    // pageUrl -> unique users
+    private HashMap<String, Set<String>> uniqueVisitors = new HashMap<>();
 
-        List<String> ngrams = new ArrayList<>();
-        String[] words = text.toLowerCase().split("\\s+");
+    // traffic source -> count
+    private HashMap<String, Integer> trafficSources = new HashMap<>();
 
-        for (int i = 0; i <= words.length - N; i++) {
+    // Process incoming event
+    public synchronized void processEvent(PageEvent event) {
 
-            StringBuilder sb = new StringBuilder();
+        // Count page visits
+        pageVisits.put(event.url,
+                pageVisits.getOrDefault(event.url, 0) + 1);
 
-            for (int j = 0; j < N; j++) {
-                sb.append(words[i + j]).append(" ");
-            }
+        // Track unique visitors
+        uniqueVisitors.putIfAbsent(event.url, new HashSet<>());
+        uniqueVisitors.get(event.url).add(event.userId);
 
-            ngrams.add(sb.toString().trim());
-        }
-
-        return ngrams;
+        // Count traffic sources
+        trafficSources.put(event.source,
+                trafficSources.getOrDefault(event.source, 0) + 1);
     }
 
-    // Add document to index
-    public void addDocument(String documentId, String text) {
+    // Get top 10 pages
+    private List<Map.Entry<String, Integer>> getTopPages() {
 
-        List<String> ngrams = generateNgrams(text);
-        documentNgrams.put(documentId, ngrams);
+        PriorityQueue<Map.Entry<String, Integer>> pq =
+                new PriorityQueue<>(Map.Entry.comparingByValue());
 
-        for (String ngram : ngrams) {
+        for (Map.Entry<String, Integer> entry : pageVisits.entrySet()) {
 
-            ngramIndex.putIfAbsent(ngram, new HashSet<>());
-            ngramIndex.get(ngram).add(documentId);
+            pq.add(entry);
+
+            if (pq.size() > 10) {
+                pq.poll();
+            }
         }
+
+        List<Map.Entry<String, Integer>> result = new ArrayList<>(pq);
+        result.sort((a, b) -> b.getValue() - a.getValue());
+
+        return result;
     }
 
-    // Analyze document similarity
-    public void analyzeDocument(String documentId) {
+    // Display dashboard
+    public void getDashboard() {
 
-        List<String> ngrams = documentNgrams.get(documentId);
+        System.out.println("===== REAL-TIME ANALYTICS DASHBOARD =====");
+        System.out.println("\nTop Pages:");
 
-        HashMap<String, Integer> matchCount = new HashMap<>();
+        List<Map.Entry<String, Integer>> topPages = getTopPages();
 
-        for (String ngram : ngrams) {
+        int rank = 1;
+        for (Map.Entry<String, Integer> entry : topPages) {
 
-            if (ngramIndex.containsKey(ngram)) {
+            String page = entry.getKey();
+            int visits = entry.getValue();
+            int unique = uniqueVisitors.get(page).size();
 
-                for (String doc : ngramIndex.get(ngram)) {
-
-                    if (!doc.equals(documentId)) {
-
-                        matchCount.put(doc,
-                                matchCount.getOrDefault(doc, 0) + 1);
-                    }
-                }
-            }
+            System.out.println(rank + ". " + page +
+                    " - " + visits + " views (" +
+                    unique + " unique visitors)");
+            rank++;
         }
 
-        System.out.println("Analyzing Document: " + documentId);
-        System.out.println("Total n-grams extracted: " + ngrams.size());
+        System.out.println("\nTraffic Sources:");
 
-        for (String doc : matchCount.keySet()) {
+        int total = trafficSources.values().stream().mapToInt(i -> i).sum();
 
-            int matches = matchCount.get(doc);
-            double similarity = (matches * 100.0) / ngrams.size();
+        for (String source : trafficSources.keySet()) {
 
-            System.out.println("Matched with " + doc +
-                    " → " + matches + " matching n-grams");
+            int count = trafficSources.get(source);
+            double percent = (count * 100.0) / total;
 
-            System.out.println("Similarity: " +
-                    String.format("%.2f", similarity) + "%");
-
-            if (similarity > 60) {
-                System.out.println("⚠ HIGH PLAGIARISM DETECTED");
-            } else if (similarity > 20) {
-                System.out.println("⚠ Moderate similarity detected");
-            }
-
-            System.out.println();
+            System.out.println(source + ": " +
+                    String.format("%.1f", percent) + "%");
         }
+
+        System.out.println("=========================================");
     }
 }
 
 public class Week1_and_Week2_Problems {
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
 
-        PlagiarismDetector detector = new PlagiarismDetector();
+        RealTimeAnalytics analytics = new RealTimeAnalytics();
 
-        String essay1 = "Artificial intelligence is transforming modern technology and improving automation in many industries";
+        // Simulated incoming events
+        analytics.processEvent(new PageEvent("/news/election-update", "user101", "google"));
+        analytics.processEvent(new PageEvent("/news/election-update", "user102", "direct"));
+        analytics.processEvent(new PageEvent("/tech/ai-breakthrough", "user103", "facebook"));
+        analytics.processEvent(new PageEvent("/sports/final-match", "user104", "google"));
+        analytics.processEvent(new PageEvent("/news/election-update", "user105", "google"));
+        analytics.processEvent(new PageEvent("/tech/ai-breakthrough", "user106", "direct"));
+        analytics.processEvent(new PageEvent("/sports/final-match", "user107", "twitter"));
+        analytics.processEvent(new PageEvent("/sports/final-match", "user108", "google"));
 
-        String essay2 = "Artificial intelligence is transforming modern technology and improving automation across many sectors";
-
-        String essay3 = "Climate change is one of the most critical environmental challenges faced by humanity today";
-
-        detector.addDocument("essay_A.txt", essay1);
-        detector.addDocument("essay_B.txt", essay2);
-        detector.addDocument("essay_C.txt", essay3);
-
-        detector.analyzeDocument("essay_B.txt");
+        // Dashboard refresh every 5 seconds
+        analytics.getDashboard();
     }
 }
